@@ -9,7 +9,9 @@ import json
 import math
 import os
 import statistics
+import subprocess
 import sys
+import tempfile
 import time
 
 import numpy as np
@@ -24,6 +26,7 @@ REQUIRED_PROVIDER = {
     "ort-trt": "TensorrtExecutionProvider",
 }
 BACKENDS = sorted(ORT_PROVIDERS) + ["tensorrt"]
+TRTEXEC = "/usr/src/tensorrt/bin/trtexec"
 
 
 class ProviderInactive(Exception):
@@ -31,7 +34,7 @@ class ProviderInactive(Exception):
 
 
 class BackendUnavailable(Exception):
-    """The library needed by the backend cannot be imported."""
+    """The program needed by the backend cannot be started."""
 
 
 def summarize(times_s, warmup):
@@ -106,34 +109,60 @@ def _ort_runner(path, backend):
     return run
 
 
-def _tensorrt_runner(path):
-    try:
-        import tensorrt.lite as trt
-    except ImportError as exc:
-        raise BackendUnavailable("tensorrt.lite cannot be imported: {}".format(exc))
-
-    engine = trt.Builder().build_model(str(path))
-    engine.activate()
-    image = _random_image(engine.get_input(0).shape)
-
-    def run():
-        engine.infer([image])
-
-    run.providers = ["tensorrt.lite"]
-    run.image = image
-    return run
-
-
 def make_runner(path, backend):
     """Load the model and return a function that runs it once on a fixed random image."""
     if backend in ORT_PROVIDERS:
         return _ort_runner(path, backend)
-    if backend == "tensorrt":
-        return _tensorrt_runner(path)
     raise ValueError("unknown backend {}, choose from {}".format(backend, BACKENDS))
 
 
+def measure_trtexec(path, runs, warmup, command=None):
+    """Measure with trtexec, NVIDIA's TensorRT tool; TensorRT 8.2 has no tensorrt.lite.
+
+    trtexec builds the engine itself, so its first images count as warmup here too.
+    Memory is the last reading before it exits, while it is still running the model.
+    """
+    with tempfile.TemporaryDirectory() as folder:
+        times_path = os.path.join(folder, "times.json")
+        log_path = os.path.join(folder, "trtexec.log")
+        arguments = (command or [TRTEXEC]) + [
+            "--onnx={}".format(path),
+            "--iterations={}".format(warmup + runs),
+            "--duration=0",
+            "--warmUp=0",
+            "--avgRuns=1",
+            "--exportTimes={}".format(times_path),
+        ]
+        start = time.perf_counter()
+        with open(log_path, "w") as log:
+            try:
+                process = subprocess.Popen(arguments, stdout=log, stderr=subprocess.STDOUT)
+            except OSError as exc:
+                raise BackendUnavailable("trtexec cannot be started: {}".format(exc))
+            process_rss = used_ram = None
+            while process.poll() is None:
+                sample = rss_mb("/proc/{}/status".format(process.pid))
+                if sample is not None:  # None means that it has just finished.
+                    process_rss, used_ram = sample, ram_used_mb()
+                time.sleep(0.2)
+        wall_s = time.perf_counter() - start
+        if process.returncode != 0:
+            with open(log_path) as log:
+                tail = " | ".join(log.read().splitlines()[-5:])
+            raise RuntimeError("trtexec exited with {}: {}".format(process.returncode, tail))
+        with open(times_path) as source:
+            times_s = [entry["latencyMs"] / 1000.0 for entry in json.load(source)]
+
+    result = {"load_s": wall_s - sum(times_s), "providers": ["trtexec"]}
+    result.update(summarize(times_s, warmup))
+    result["rss_mb"] = process_rss
+    result["ram_used_mb"] = used_ram
+    return result
+
+
 def _measure(path, backend, runs, warmup):
+    if backend == "tensorrt":
+        return measure_trtexec(path, runs, warmup)
     start = time.perf_counter()
     run = make_runner(path, backend)
     load_s = time.perf_counter() - start

@@ -11,6 +11,7 @@ from probe_speed import (
     assert_provider_active,
     main,
     make_runner,
+    measure_trtexec,
     ram_used_mb,
     rss_mb,
     summarize,
@@ -134,40 +135,55 @@ def test_make_runner_rejects_unknown_backend():
         make_runner("m.onnx", "nope")
 
 
-def test_tensorrt_missing_gives_clear_error(monkeypatch):
-    monkeypatch.setitem(sys.modules, "tensorrt", None)
-    with pytest.raises(BackendUnavailable, match="tensorrt"):
-        make_runner("m.onnx", "tensorrt")
+FAKE_TRTEXEC = """
+import json, sys, time
+args = dict(a[2:].split("=", 1) for a in sys.argv[1:] if "=" in a)
+if "fail" in args["onnx"]:
+    print("Error: cannot parse the model")
+    sys.exit(1)
+if "slow" in args["onnx"]:
+    time.sleep(0.7)
+count = int(args["iterations"])
+times = [{"latencyMs": 10.0 + i} for i in range(count)]
+with open(args["exportTimes"], "w") as out:
+    json.dump(times, out)
+"""
 
 
-def test_tensorrt_runner_infers_with_image_of_model_size(monkeypatch):
-    seen = []
+@pytest.fixture
+def fake_trtexec(tmp_path):
+    script = tmp_path / "fake_trtexec.py"
+    script.write_text(FAKE_TRTEXEC)
+    return [sys.executable, str(script)]
 
-    class Meta:
-        shape = (1, 3, 8, 8)
 
-    class Engine:
-        def activate(self):
-            seen.append("activate")
+def test_trtexec_times_exclude_warmup_and_keep_order(fake_trtexec):
+    result = measure_trtexec("m.onnx", runs=3, warmup=2, command=fake_trtexec)
+    assert result["runs"] == 3
+    assert result["times_ms"] == pytest.approx([12.0, 13.0, 14.0])
+    assert result["providers"] == ["trtexec"]
+    assert result["load_s"] >= 0
 
-        def get_input(self, index):
-            return Meta()
 
-        def infer(self, inputs):
-            seen.append(inputs[0].shape)
+def test_trtexec_memory_ignores_the_reading_after_the_process_ended(fake_trtexec, monkeypatch):
+    rss = iter([100.0])
+    ram = iter([2000.0])
+    # A finished process has no VmRSS line, so its reading comes back as None.
+    monkeypatch.setattr("probe_speed.rss_mb", lambda path: next(rss, None))
+    monkeypatch.setattr("probe_speed.ram_used_mb", lambda: next(ram, 500.0))
+    result = measure_trtexec("slow.onnx", runs=3, warmup=2, command=fake_trtexec)
+    assert result["rss_mb"] == 100.0
+    assert result["ram_used_mb"] == 2000.0
 
-    class Builder:
-        def build_model(self, path):
-            return Engine()
 
-    package = types.ModuleType("tensorrt")
-    lite = types.ModuleType("tensorrt.lite")
-    lite.Builder = Builder
-    package.lite = lite
-    monkeypatch.setitem(sys.modules, "tensorrt", package)
-    monkeypatch.setitem(sys.modules, "tensorrt.lite", lite)
-    make_runner("m.onnx", "tensorrt")()
-    assert seen == ["activate", (1, 3, 8, 8)]
+def test_trtexec_failure_keeps_its_message(fake_trtexec):
+    with pytest.raises(RuntimeError, match="cannot parse"):
+        measure_trtexec("fail.onnx", runs=3, warmup=2, command=fake_trtexec)
+
+
+def test_trtexec_missing_gives_clear_error(tmp_path):
+    with pytest.raises(BackendUnavailable, match="trtexec"):
+        measure_trtexec("m.onnx", runs=3, warmup=2, command=[str(tmp_path / "trtexec")])
 
 
 def test_main_writes_one_json_line(monkeypatch, capsys):
@@ -189,12 +205,12 @@ def test_main_writes_one_json_line(monkeypatch, capsys):
 
 
 def test_main_reports_a_failing_backend_as_data(monkeypatch, capsys):
-    monkeypatch.setitem(sys.modules, "tensorrt", None)
+    monkeypatch.setattr("probe_speed.TRTEXEC", "missing-trtexec-binary")
     code = main(["--onnx", "m.onnx", "--backend", "tensorrt"])
     result = json.loads(capsys.readouterr().out)
     assert code == 1
     assert result["backend"] == "tensorrt" and result["model"] == "m.onnx"
-    assert "tensorrt" in result["error"]
+    assert "trtexec" in result["error"]
 
 
 def test_real_numpy_is_used_for_the_image(monkeypatch):
