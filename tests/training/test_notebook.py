@@ -27,8 +27,7 @@ def without_shell_commands(source):
     for line in source.splitlines():
         stripped = line.lstrip()
         lines.append(line[:len(line) - len(stripped)] + "pass" if stripped.startswith("!") else line)
-    return "
-".join(lines)
+    return "\n".join(lines)
 
 
 def test_notebook_code_cells_compile_once_shell_lines_are_replaced():
