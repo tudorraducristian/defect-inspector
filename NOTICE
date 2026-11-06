@@ -1,0 +1,13 @@
+defect-inspector includes code from the following project.
+
+EfficientAD, by nelson1425
+https://github.com/nelson1425/EfficientAD
+Commit fcab5146f84ae17597044ad5ddf1656ccf805401
+Licensed under the Apache License, Version 2.0. A copy of the license is in
+third_party/EfficientAD/LICENSE.
+
+- training/defect_train/architecture.py: get_pdn_small and get_autoencoder are
+  copied from common.py without changes.
+- training/defect_train/architecture.py: AnomalyNet.forward is adapted from predict
+  in efficientad.py. It returns only the combined map, and it can run without the
+  autoencoder.

@@ -1,0 +1,7 @@
+# Install torch from the CPU index:
+#   pip install torch==2.15.0 --index-url https://download.pytorch.org/whl/cpu
+torch==2.15.0
+onnx==1.23.2
+onnxruntime==1.31.1
+scikit-learn==1.9.1
+pytest
