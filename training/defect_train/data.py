@@ -67,7 +67,7 @@ def load_splits(root, val_fraction=0.1, seed=42) -> Splits:
     return Splits(train, val, test)
 
 
-def _read(path):
+def read_image(path):
     frame = cv2.imread(str(path), cv2.IMREAD_COLOR)
     if frame is None:
         raise DatasetError("cannot read image {}".format(path))
@@ -97,7 +97,7 @@ class TrainImages(Dataset):
         return len(self.paths)
 
     def __getitem__(self, index):
-        frame = _read(self.paths[index])
+        frame = read_image(self.paths[index])
         clean = to_model_input(frame, self.image_size, IMAGENET_MEAN, IMAGENET_STD)[0]
         rgb = _to_tensor(to_rgb01(frame, self.image_size))
         return torch.from_numpy(clean), _normalize(_jitter(rgb))
@@ -118,5 +118,5 @@ class PenaltyImages(Dataset):
         return len(self.paths)
 
     def __getitem__(self, index):
-        rgb = _to_tensor(to_rgb01(_read(self.paths[index]), 2 * self.image_size))
+        rgb = _to_tensor(to_rgb01(read_image(self.paths[index]), 2 * self.image_size))
         return _normalize(self._crop(self._gray(rgb)))
