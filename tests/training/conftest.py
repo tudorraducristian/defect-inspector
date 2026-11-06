@@ -2,6 +2,9 @@
 import cv2
 import numpy as np
 import pytest
+import torch
+
+from defect_train.architecture import get_pdn_small
 
 
 def write_images(folder, count, seed=0, size=64):
@@ -66,3 +69,10 @@ def penalty_folder(tmp_path):
     write_images(root / "train" / "class_a", 2, 70)
     write_images(root / "val" / "class_b", 1, 71)
     return root
+
+
+@pytest.fixture
+def random_teacher(tmp_path):
+    path = tmp_path / "teacher.pth"
+    torch.save(get_pdn_small(384).state_dict(), path)
+    return path
