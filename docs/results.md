@@ -33,7 +33,9 @@ mai mare, plus 10%. Încă nu e confirmat.
 | bune | 22 | 1, adică 4,5% |
 | defecte | 93 | 91, adică 97,8% |
 
-- Imaginea bună marcată greșit e `test/good/016.png`, cu scorul 0,917.
+- Imaginea bună marcată greșit e `test/good/016.png`, cu scorul 0,917. Următoarea imagine bună
+  are 0,261. Din cele 27 de perechi bună-defectă ordonate greșit, din 2046, 21 vin de la ea. Fără
+  ea, AUROC ar fi 0,9969. Calculul arată cât cântărește o imagine, iar scorul raportat rămâne 0,9868.
 - Defectele ratate sînt `test/scratch/000.png`, cu 0,299, și `test/scratch/020.png`, cu 0,167.
 
 ## Cum s-a verificat
