@@ -18,6 +18,7 @@ from collections import namedtuple
 from pathlib import Path
 
 import cv2
+import numpy as np
 
 from defect_inspector.camera import CameraWorker, load_station, open_camera, settings_from_dict
 
@@ -28,6 +29,8 @@ KEY_ENTER = (10, 13)
 KEY_ESC = 27
 MIN_SECONDS_BETWEEN_SHOTS = 0.4
 WINDOW = "defect-inspector"
+NO_CAMERA_SIZE = (360, 640, 3)
+NO_CAMERA_LINES = ["Camera nu da imagine.", "Reincerc singur. Esc: opresc."]
 
 SessionStep = namedtuple("SessionStep", ["kind", "defect_type", "piece", "shots_done", "shots_total", "paths"])
 
@@ -154,7 +157,10 @@ def run_setup(settings, root):
     try:
         if _wait_for_enter(capture, ["Aseaza camera si lumina.", "Enter: blochez setarile. Esc: renunt."]) is None:
             return False
+        # Reopened with the locked settings, so the table photo looks like the later photos.
         settings = _locked(settings, capture)
+        capture.release()
+        capture = open_camera(settings)
         ok, frame = capture.read()
         if not ok:
             raise RuntimeError("the camera gives no frames")
@@ -201,7 +207,8 @@ def run_session(camera, steps, roi):
                 while True:
                     latest = camera.latest()
                     if latest is None:
-                        cv2.waitKey(100)
+                        if _show(np.zeros(NO_CAMERA_SIZE, np.uint8), NO_CAMERA_LINES) == KEY_ESC:
+                            return False
                         continue
                     key = _show(latest[0], lines, roi)
                     if key == KEY_ESC:
@@ -220,6 +227,28 @@ def _parse_roi(text):
     if len(values) != 4:
         raise ValueError("expected --roi x,y,width,height")
     return values
+
+
+def _check_arguments(parser, args):
+    """Refuse an incomplete command before the camera starts; return the parsed defect types."""
+    if args.setup:
+        return None
+    if args.headless:
+        if not args.kind or not args.piece:
+            parser.error("--headless needs --kind and --piece")
+        if args.kind == "defect" and not args.defect_type:
+            parser.error("--kind defect needs --defect-type")
+        return None
+    if args.session == "good" and not args.pieces:
+        parser.error("--session good needs --pieces")
+    if args.session == "defect" and not args.types:
+        parser.error("--session defect needs --types")
+    if not args.session:
+        parser.error("choose --setup, --session or --headless")
+    try:
+        return parse_types(args.types) if args.types else None
+    except ValueError as error:
+        parser.error(str(error))
 
 
 def main(argv=None):
@@ -242,6 +271,7 @@ def main(argv=None):
     parser.add_argument("--fps", type=int, default=30)
     args = parser.parse_args(argv)
     root = args.data / args.object
+    types = _check_arguments(parser, args)
 
     if args.setup:
         settings = settings_from_dict({"index": args.camera, "width": args.width,
@@ -262,7 +292,6 @@ def main(argv=None):
         if args.headless:
             capture_shots(camera, next_shots(root, args.kind, args.piece, args.shots, args.defect_type))
             return 0
-        types = parse_types(args.types) if args.types else None
         steps = plan_session(root, args.session, pieces=args.pieces, shots=args.shots, types=types)
         return 0 if run_session(camera, steps, station.roi) else 1
     finally:

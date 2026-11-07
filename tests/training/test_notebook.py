@@ -21,6 +21,14 @@ def test_notebook_checks_the_teacher_size():
     assert "10779715" in "".join(c.source for c in read_notebook().cells)
 
 
+def test_notebook_never_trains_on_a_half_extracted_archive():
+    """Stopped during extraction, the final folder must not exist on the next Run all."""
+    text = "".join(c.source for c in read_notebook().cells)
+    assert "shutil.unpack_archive(str(archive), str(partial))" in text
+    assert "os.replace(partial, extracted)" in text
+    assert "shutil.unpack_archive(str(archive), str(extracted))" not in text
+
+
 def test_notebook_passes_the_station_when_the_dataset_has_one():
     text = "".join(c.source for c in read_notebook().cells)
     assert 'DATASET_ROOT / "station.json"' in text and "{station_flag}" in text
