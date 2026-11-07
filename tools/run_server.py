@@ -21,7 +21,7 @@ def parse_args(argv=None):
     parser.add_argument("--profiles", default="profiles")
     parser.add_argument("--backend", default="ort-cpu")
     source = parser.add_mutually_exclusive_group()
-    source.add_argument("--camera", type=int, default=0)
+    source.add_argument("--camera", type=int, help="by default, the camera that took the photos of the chosen object")
     source.add_argument("--replay", help="folder of images to play instead of the camera")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
@@ -31,7 +31,8 @@ def parse_args(argv=None):
 def build_camera(args):
     if args.replay:
         return ReplayCamera(args.replay, fps=REPLAY_FPS)
-    return CameraWorker(settings_from_dict({"index": args.camera}))
+    chosen = args.camera is not None
+    return CameraWorker(settings_from_dict({"index": args.camera if chosen else 0}), keep_index=chosen)
 
 
 def main(argv=None):

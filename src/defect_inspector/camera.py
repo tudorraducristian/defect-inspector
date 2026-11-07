@@ -51,8 +51,10 @@ def open_camera(settings):
 
 
 class CameraWorker:
-    def __init__(self, settings, open_capture=None, now=None, stale_after_s=2.0, reopen_backoff_s=2.0):
+    def __init__(self, settings, open_capture=None, now=None, stale_after_s=2.0, reopen_backoff_s=2.0,
+                 keep_index=True):
         self._settings = settings
+        self._keep_index = keep_index
         self._open_capture = open_capture or open_camera
         self._now = now or time.monotonic
         self._stale_after_s = stale_after_s
@@ -91,8 +93,12 @@ class CameraWorker:
             self._failed = True
 
     def configure(self, settings):
-        """Use these settings on the same camera; the reopening happens in the camera thread."""
-        settings = settings._replace(index=self._settings.index)
+        """Use these settings; the reopening happens in the camera thread.
+
+        A camera chosen by hand stays; otherwise the settings also say which camera to use.
+        """
+        if self._keep_index:
+            settings = settings._replace(index=self._settings.index)
         with self._lock:
             if settings != self._settings:
                 self._settings = settings

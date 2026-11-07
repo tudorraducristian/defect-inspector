@@ -142,6 +142,20 @@ def test_configure_reopens_with_the_new_settings_on_the_same_camera(fake_clock):
     assert opened[1].width == 1280 and opened[1].index == 2
 
 
+def test_camera_not_chosen_by_hand_follows_the_settings_it_receives(fake_clock):
+    opened = []
+
+    def open_capture(settings):
+        opened.append(settings)
+        return FakeCapture([])
+
+    worker = CameraWorker(SETTINGS, open_capture=open_capture, now=fake_clock, keep_index=False)
+    worker._run_once()
+    worker.configure(SETTINGS._replace(index=1))
+    worker._run_once()
+    assert [s.index for s in opened] == [0, 1]
+
+
 def test_configure_with_the_same_settings_does_not_reopen(fake_clock):
     capture = FakeCapture([])
     worker = CameraWorker(SETTINGS, open_capture=capture.open, now=fake_clock)
