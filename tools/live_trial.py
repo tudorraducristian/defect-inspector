@@ -24,18 +24,22 @@ def rates_from_sequence(labels, good_count):
 
 
 def record_verdicts(get_state, total, on_verdict, pause=None):
-    """Return one label per piece; a verdict counts once, however many times it is read."""
+    """Return one label per piece: its last verdict before the table is empty again.
+
+    A piece can get a first verdict while the hand is still near it and a second one after; only
+    the one it had when it was taken away counts.
+    """
     pause = pause or (lambda: time.sleep(POLL_S))
     labels = []
-    showing = False
+    current = None
     while len(labels) < total:
         state = get_state()
-        if state["status"] != "RESULT":
-            showing = False
-        elif not showing:
-            showing = True
-            labels.append(state["label"])
-            on_verdict(state["label"])
+        if state["status"] == "RESULT":
+            current = state["label"]
+        elif state["status"] == "EMPTY" and current is not None:
+            labels.append(current)
+            on_verdict(current)
+            current = None
         pause()
     return labels
 

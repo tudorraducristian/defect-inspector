@@ -30,16 +30,22 @@ def test_wrong_number_of_good_pieces_is_refused():
 
 
 def test_one_verdict_stays_one_however_long_it_is_read():
-    assert run([MOVING, result("OK"), result("OK"), result("OK"), EMPTY, result("DEFECT")], 2) == ["OK", "DEFECT"]
+    assert run([MOVING, result("OK"), result("OK"), result("OK"), EMPTY, result("DEFECT"), EMPTY], 2) == ["OK", "DEFECT"]
 
 
-def test_a_new_piece_after_moving_counts_again():
-    assert run([result("OK"), MOVING, result("OK")], 2) == ["OK", "OK"]
+def test_a_piece_counts_once_with_its_last_verdict_before_the_table_is_empty():
+    # A verdict taken while the hand was still in the picture is replaced by the one on the piece alone.
+    states = [result("DEFECT"), MOVING, result("OK"), EMPTY, result("DEFECT"), EMPTY]
+    assert run(states, 2) == ["OK", "DEFECT"]
+
+
+def test_a_piece_taken_away_before_any_verdict_counts_nothing():
+    assert run([MOVING, EMPTY, MOVING, result("OK"), EMPTY], 1) == ["OK"]
 
 
 def test_other_states_are_not_verdicts():
     errors = [{"status": "ERROR", "label": None}, {"status": "CAMERA_LOST", "label": None}]
-    assert run(errors + [result("DEFECT")], 1) == ["DEFECT"]
+    assert run(errors + [result("DEFECT"), EMPTY], 1) == ["DEFECT"]
 
 
 def test_it_stops_at_the_total():
