@@ -39,6 +39,15 @@ def test_cli_station_goes_into_the_profile(tmp_path, tiny_dataset, random_teache
     assert (tmp_path / "profile" / "background.jpg").read_bytes() == b"table"
 
 
+def test_station_of_the_dataset_is_used_without_the_flag(tmp_path, tiny_dataset, random_teacher):
+    # A notebook from before --station would otherwise give a profile with no zone, no camera and no gate.
+    (tiny_dataset / "station.json").write_text(json.dumps({"roi": [0, 0, 8, 8], "camera": {"index": 1}}))
+    (tiny_dataset / "background.jpg").write_bytes(b"table")
+    run_cli(tiny_dataset, random_teacher, tmp_path, train_steps=1)
+    profile = json.loads((tmp_path / "profile" / "profile.json").read_text())
+    assert profile["roi"] == [0, 0, 8, 8] and (tmp_path / "profile" / "background.jpg").exists()
+
+
 def test_same_command_resumes(tmp_path, tiny_dataset, random_teacher, capsys):
     run_cli(tiny_dataset, random_teacher, tmp_path, train_steps=2)
     capsys.readouterr()

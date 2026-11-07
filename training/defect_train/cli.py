@@ -31,6 +31,15 @@ def _print_progress(update):
         print("step {step}, loss {loss:.4f}".format(**update), flush=True)
 
 
+def _station_path(args):
+    """The station given, or the one prepare_dataset.py left in the dataset; without one the
+    profile has no zone, no camera and no table photo, and the station judges the whole frame."""
+    if args.station is not None:
+        return args.station
+    found = args.dataset_root / "station.json"
+    return found if found.exists() else None
+
+
 def _read_station(path):
     if path is None:
         return None
@@ -86,7 +95,7 @@ def main(argv=None):
         for path in splits.val[:VERIFY_IMAGES]
     ])
     write_profile(net, args.out / "profile", args.object_id, args.object_name,
-                  args.image_size, metrics, images, station=_read_station(args.station))
+                  args.image_size, metrics, images, station=_read_station(_station_path(args)))
     print("AUROC {:.4f}, proposed threshold {:.4f}".format(metrics["image_auroc"], metrics["threshold"]))
 
 
