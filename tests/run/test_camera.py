@@ -253,9 +253,27 @@ def test_open_camera_asks_for_mjpg_and_size(recording_capture):
     assert (props[cv2.CAP_PROP_FRAME_WIDTH], props[cv2.CAP_PROP_FRAME_HEIGHT]) == (640, 480)
 
 
-def test_open_camera_leaves_automatic_settings_when_none_are_given(recording_capture):
+@pytest.mark.parametrize("platform, auto_exposure", [("win32", 0.75), ("linux", 3)])
+def test_open_camera_turns_automatic_settings_back_on_when_none_are_given(recording_capture, monkeypatch,
+                                                                         platform, auto_exposure):
+    # A camera keeps manual mode after it is closed, so an earlier lock must be undone explicitly.
+    monkeypatch.setattr(camera_module.sys, "platform", platform)
     props = open_camera(SETTINGS).props
-    assert cv2.CAP_PROP_EXPOSURE not in props and cv2.CAP_PROP_WB_TEMPERATURE not in props
+    assert props[cv2.CAP_PROP_AUTO_EXPOSURE] == auto_exposure
+    assert props[cv2.CAP_PROP_AUTO_WB] == 1 and props[cv2.CAP_PROP_AUTOFOCUS] == 1
+    for prop in (cv2.CAP_PROP_EXPOSURE, cv2.CAP_PROP_WB_TEMPERATURE, cv2.CAP_PROP_FOCUS, cv2.CAP_PROP_GAIN):
+        assert prop not in props
+
+
+def test_open_camera_locks_focus_and_gain_when_given(recording_capture):
+    props = open_camera(SETTINGS._replace(focus=30, gain=64)).props
+    assert props[cv2.CAP_PROP_AUTOFOCUS] == 0 and props[cv2.CAP_PROP_FOCUS] == 30
+    assert props[cv2.CAP_PROP_GAIN] == 64
+
+
+def test_station_from_before_focus_and_gain_still_loads():
+    settings = camera_module.settings_from_dict({"index": 1, "exposure": -6, "white_balance": 4600})
+    assert (settings.focus, settings.gain) == (None, None)
 
 
 def test_open_camera_locks_exposure_and_white_balance_when_given(recording_capture, monkeypatch):

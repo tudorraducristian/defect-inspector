@@ -119,12 +119,33 @@ def write_station(root, station, background):
     (root / "station.json").write_text(json.dumps(station, indent=2), encoding="utf-8")
 
 
+# Each control the setup locks: the setting, the OpenCV property, the name shown to Tudor, and which
+# values are real. OpenCV gives -1 for a control the camera does not have.
+LOCKED_CONTROLS = [
+    ("exposure", cv2.CAP_PROP_EXPOSURE, "expunere", lambda v: v not in (0, -1)),
+    ("white_balance", cv2.CAP_PROP_WB_TEMPERATURE, "balans alb", lambda v: v > 0),
+    ("focus", cv2.CAP_PROP_FOCUS, "focalizare", lambda v: v >= 0),
+    ("gain", cv2.CAP_PROP_GAIN, "castig", lambda v: v >= 0),
+]
+
+
 def _locked(settings, capture):
     """Keep what the camera settled on, so light changes do not change the image later."""
-    exposure = capture.get(cv2.CAP_PROP_EXPOSURE)
-    white_balance = capture.get(cv2.CAP_PROP_WB_TEMPERATURE)
-    return settings._replace(exposure=exposure if exposure else None,
-                             white_balance=white_balance if white_balance > 0 else None)
+    values = {}
+    for name, prop, _, is_real in LOCKED_CONTROLS:
+        value = capture.get(prop)
+        values[name] = value if is_real(value) else None
+    return settings._replace(**values)
+
+
+def _report_locked(settings, capture):
+    """Print what the reopened camera holds, so a lock that did not take is seen at once."""
+    print("Camera, dupa blocare:")
+    for name, prop, label, _ in LOCKED_CONTROLS:
+        if getattr(settings, name) is None:
+            print("  {}: nu se poate bloca".format(label))
+        else:
+            print("  {} {:g} (cerut {:g})".format(label, capture.get(prop), getattr(settings, name)))
 
 
 def _show(frame, lines, roi=None):
@@ -164,6 +185,7 @@ def run_setup(settings, root):
         ok, frame = capture.read()
         if not ok:
             raise RuntimeError("the camera gives no frames")
+        _report_locked(settings, capture)
         x, y, width, height = cv2.selectROI(WINDOW, frame, showCrosshair=False)
         if width == 0 or height == 0:
             return False
@@ -190,20 +212,23 @@ def run_setup_headless(settings, root, roi):
         capture.release()
 
 
-def _step_lines(step, shot_index, position, total):
+def _step_lines(step, shot_index, position, total, flip_after=None):
     name = "Piesa {}".format(step.piece) if step.kind == "good" else "{} piesa {}".format(step.defect_type, step.piece)
-    return ["{} ({} din {})".format(name, position, total),
-            "Poza {} din {}".format(step.shots_done + shot_index + 1, step.shots_total),
-            "Enter: poza. Esc: opresc."]
+    shot = step.shots_done + shot_index + 1
+    lines = ["{} ({} din {})".format(name, position, total), "Poza {} din {}".format(shot, step.shots_total)]
+    if flip_after:
+        # Counted from the shot number, so a resumed piece still shows the right face.
+        lines.append("Fata A" if shot <= flip_after else "Intoarce piulita: fata B")
+    return lines + ["Enter: poza. Esc: opresc."]
 
 
-def run_session(camera, steps, roi):
+def run_session(camera, steps, roi, flip_after=None):
     """One window for the whole session; return False if Tudor stopped it with Esc."""
     last_shot_at = 0.0
     try:
         for position, step in enumerate(steps, 1):
             for shot_index, path in enumerate(step.paths):
-                lines = _step_lines(step, shot_index, position, len(steps))
+                lines = _step_lines(step, shot_index, position, len(steps), flip_after)
                 while True:
                     latest = camera.latest()
                     if latest is None:
@@ -269,11 +294,19 @@ def main(argv=None):
     parser.add_argument("--width", type=int, default=1280)
     parser.add_argument("--height", type=int, default=720)
     parser.add_argument("--fps", type=int, default=30)
+    parser.add_argument("--flip-after", type=int, help="turn the piece over after this many photos")
+    parser.add_argument("--force", action="store_true", help="with --setup, replace a station that has photos")
     args = parser.parse_args(argv)
     root = args.data / args.object
     types = _check_arguments(parser, args)
 
     if args.setup:
+        # A new zone or new camera values would apply to the photos already taken, which saw the old ones.
+        if not args.force and any((root / kind).is_dir() and any((root / kind).rglob("*.jpg"))
+                                  for kind in ("good", "defect")):
+            print("{} are deja poze; o statie noua le-ar strica. Adauga --force daca vrei asta.".format(root),
+                  file=sys.stderr)
+            return 2
         settings = settings_from_dict({"index": args.camera, "width": args.width,
                                        "height": args.height, "fps": args.fps})
         if args.headless:
@@ -293,7 +326,7 @@ def main(argv=None):
             capture_shots(camera, next_shots(root, args.kind, args.piece, args.shots, args.defect_type))
             return 0
         steps = plan_session(root, args.session, pieces=args.pieces, shots=args.shots, types=types)
-        return 0 if run_session(camera, steps, station.roi) else 1
+        return 0 if run_session(camera, steps, station.roi, args.flip_after) else 1
     finally:
         camera.stop()
 

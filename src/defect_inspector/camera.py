@@ -14,12 +14,18 @@ from pathlib import Path
 import cv2
 
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg"}
-DEFAULT_CAMERA = {"index": 0, "width": 1280, "height": 720, "fps": 30, "exposure": None, "white_balance": None}
-# OpenCV gives "manual exposure" a different value on each driver.
+DEFAULT_CAMERA = {"index": 0, "width": 1280, "height": 720, "fps": 30, "exposure": None, "white_balance": None,
+                  "focus": None, "gain": None}
+# OpenCV gives "manual exposure" and "automatic exposure" different values on each driver.
 MANUAL_EXPOSURE = {"win32": 0.25}
 MANUAL_EXPOSURE_LINUX = 1
+AUTO_EXPOSURE = {"win32": 0.75}
+AUTO_EXPOSURE_LINUX = 3
 
-CameraSettings = namedtuple("CameraSettings", ["index", "width", "height", "fps", "exposure", "white_balance"])
+CameraSettings = namedtuple("CameraSettings", ["index", "width", "height", "fps", "exposure", "white_balance",
+                                               "focus", "gain"])
+# Stations written before focus and gain were kept still load.
+CameraSettings.__new__.__defaults__ = (None, None)
 Station = namedtuple("Station", ["camera", "roi"])
 
 
@@ -41,12 +47,24 @@ def open_camera(settings):
     capture.set(cv2.CAP_PROP_FRAME_WIDTH, settings.width)
     capture.set(cv2.CAP_PROP_FRAME_HEIGHT, settings.height)
     capture.set(cv2.CAP_PROP_FPS, settings.fps)
-    if settings.exposure is not None:
+    # A camera keeps manual mode after it is closed, so "not locked" has to turn automatic back on.
+    if settings.exposure is None:
+        capture.set(cv2.CAP_PROP_AUTO_EXPOSURE, AUTO_EXPOSURE.get(sys.platform, AUTO_EXPOSURE_LINUX))
+    else:
         capture.set(cv2.CAP_PROP_AUTO_EXPOSURE, MANUAL_EXPOSURE.get(sys.platform, MANUAL_EXPOSURE_LINUX))
         capture.set(cv2.CAP_PROP_EXPOSURE, settings.exposure)
-    if settings.white_balance is not None:
+    if settings.white_balance is None:
+        capture.set(cv2.CAP_PROP_AUTO_WB, 1)
+    else:
         capture.set(cv2.CAP_PROP_AUTO_WB, 0)
         capture.set(cv2.CAP_PROP_WB_TEMPERATURE, settings.white_balance)
+    if settings.focus is None:
+        capture.set(cv2.CAP_PROP_AUTOFOCUS, 1)
+    else:
+        capture.set(cv2.CAP_PROP_AUTOFOCUS, 0)
+        capture.set(cv2.CAP_PROP_FOCUS, settings.focus)
+    if settings.gain is not None:
+        capture.set(cv2.CAP_PROP_GAIN, settings.gain)
     return capture
 
 

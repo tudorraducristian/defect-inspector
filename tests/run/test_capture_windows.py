@@ -45,7 +45,15 @@ class StillCamera:
         return FRAME, 1
 
 
+CAMERA_VALUES = {cv2.CAP_PROP_EXPOSURE: -6.0, cv2.CAP_PROP_WB_TEMPERATURE: 4600.0,
+                 cv2.CAP_PROP_FOCUS: 30.0, cv2.CAP_PROP_GAIN: 64.0}
+# What OpenCV gives for a control the camera does not have.
+NO_CONTROLS = {prop: -1.0 for prop in CAMERA_VALUES}
+
+
 class FakeCapture:
+    values = CAMERA_VALUES
+
     def __init__(self, settings):
         self.settings = settings
         self.released = False
@@ -54,7 +62,7 @@ class FakeCapture:
         return True, FRAME.copy()
 
     def get(self, prop):
-        return {cv2.CAP_PROP_EXPOSURE: -6.0, cv2.CAP_PROP_WB_TEMPERATURE: 4600.0}[prop]
+        return self.values[prop]
 
     def release(self):
         self.released = True
@@ -139,6 +147,81 @@ def test_setup_takes_the_table_photo_with_the_settings_already_locked(monkeypatc
     run_setup(SETTINGS, tmp_path)
     assert len(opened) == 2 and opened[0].released
     assert opened[1].settings.exposure == -6.0 and opened[1].released
+
+
+def test_setup_locks_focus_and_gain_too(monkeypatch, tmp_path, opened):
+    Screen(monkeypatch, [ENTER, ENTER])
+    run_setup(SETTINGS, tmp_path)
+    camera = load_station(tmp_path / "station.json").camera
+    assert (camera.focus, camera.gain) == (30.0, 64.0)
+    assert (opened[1].settings.focus, opened[1].settings.gain) == (30.0, 64.0)
+
+
+def test_setup_leaves_unlocked_what_the_camera_does_not_have(monkeypatch, tmp_path, opened):
+    monkeypatch.setattr(FakeCapture, "values", NO_CONTROLS)
+    Screen(monkeypatch, [ENTER, ENTER])
+    run_setup(SETTINGS, tmp_path)
+    camera = load_station(tmp_path / "station.json").camera
+    assert (camera.exposure, camera.white_balance, camera.focus, camera.gain) == (None, None, None, None)
+
+
+def test_setup_reports_what_the_camera_holds_after_locking(monkeypatch, tmp_path, opened, capsys):
+    values = dict(CAMERA_VALUES)
+    values[cv2.CAP_PROP_FOCUS] = -1.0
+    monkeypatch.setattr(FakeCapture, "values", values)
+    Screen(monkeypatch, [ENTER, ENTER])
+    run_setup(SETTINGS, tmp_path)
+    out = capsys.readouterr().out
+    assert "expunere -6" in out and "balans alb 4600" in out and "castig 64" in out
+    assert "focalizare: nu se poate bloca" in out
+
+
+def test_setup_refuses_to_replace_a_station_that_already_has_photos(tmp_path, monkeypatch, capsys):
+    write_station(tmp_path / "x")
+    shot = shot_path(tmp_path / "x", "good", 1, 1)
+    shot.parent.mkdir(parents=True)
+    cv2.imwrite(str(shot), FRAME)
+    ran = []
+    monkeypatch.setattr(capture, "run_setup", lambda settings, root: ran.append(root) or True)
+    assert main(["--object", "x", "--data", str(tmp_path), "--setup"]) == 2
+    assert "--force" in capsys.readouterr().err and not ran
+    assert main(["--object", "x", "--data", str(tmp_path), "--setup", "--force"]) == 0
+    assert ran
+
+
+def shown_text(monkeypatch):
+    texts = []
+    real = capture.cv2.putText
+    monkeypatch.setattr(capture.cv2, "putText", lambda image, text, *a: texts.append(text) or real(image, text, *a))
+    return texts
+
+
+def test_session_says_when_to_turn_the_piece_over(monkeypatch, tmp_path):
+    texts = shown_text(monkeypatch)
+    Screen(monkeypatch, [ENTER] * 5)
+    run_session(StillCamera(), plan_session(tmp_path, "good", pieces=1, shots=5), None, flip_after=3)
+    face_a = [t for t in texts if "Fata A" in t]
+    face_b = [t for t in texts if "Intoarce piulita" in t]
+    # Drawn twice per shown frame (outline, then letters): 3 shots on face A, 2 on face B.
+    assert len(face_a) == 6 and len(face_b) == 4
+
+
+def test_session_without_turning_says_nothing_about_faces(monkeypatch, tmp_path):
+    texts = shown_text(monkeypatch)
+    Screen(monkeypatch, [ENTER] * 3)
+    run_session(StillCamera(), plan_session(tmp_path, "good", pieces=1, shots=3), None)
+    assert not [t for t in texts if "Fata" in t or "Intoarce" in t]
+
+
+def test_resumed_piece_still_knows_its_face(monkeypatch, tmp_path):
+    for shot in (1, 2, 3):
+        path = shot_path(tmp_path, "good", 1, shot)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        cv2.imwrite(str(path), FRAME)
+    texts = shown_text(monkeypatch)
+    Screen(monkeypatch, [ENTER] * 2)
+    run_session(StillCamera(), plan_session(tmp_path, "good", pieces=1, shots=5), None, flip_after=3)
+    assert not [t for t in texts if "Fata A" in t] and [t for t in texts if "Intoarce piulita" in t]
 
 
 def test_esc_during_setup_writes_nothing(monkeypatch, tmp_path, opened):
