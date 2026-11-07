@@ -18,6 +18,11 @@ OTHER[4:36, 28:60] = 40
 STATE_FIELDS = {"status", "label", "score", "threshold", "latency_ms", "profile_id", "frame_id", "message"}
 
 
+def fast_gate():
+    """The real gate, without the wait for stillness, so each step is one frame and no clock is needed."""
+    return SceneGate(TABLE, still_seconds=0)
+
+
 def make_profile(profile_id="nut", threshold=0.5):
     return Profile(profile_id, profile_id, None, 32, threshold, [0.4] * 3, [0.2] * 3, 4, None, None, {})
 
@@ -78,7 +83,7 @@ class Rig:
         self.profile = make_profile()
         self.loop = InspectionLoop(self.camera)
         self.loop.set_inspector(Inspector(self.profile, self.backend), self.profile,
-                                SceneGate(TABLE) if gate else None)
+                                fast_gate() if gate else None)
 
     def step(self):
         self.loop.step()
@@ -137,7 +142,7 @@ def loop_without_profile():
 @pytest.fixture
 def other():
     profile = make_profile("washer")
-    return Inspector(profile, FakeBackend()), profile, SceneGate(TABLE)
+    return Inspector(profile, FakeBackend()), profile, fast_gate()
 
 
 def test_empty_table_gives_no_verdict(loop_on_empty_table):
@@ -195,6 +200,16 @@ def test_swapping_piece_directly_gives_new_verdict(loop_with_still_piece):
     assert loop_with_still_piece.backend.calls == 2
 
 
+def test_piece_pushed_slowly_away_gets_a_new_verdict(loop_with_still_piece):
+    # A pixel per frame never looks like movement frame to frame, so the first verdict would stay.
+    settle(loop_with_still_piece)
+    for dx in range(1, 13):
+        loop_with_still_piece.camera.show(np.roll(PIECE, dx, axis=1))
+        loop_with_still_piece.step()
+    settle(loop_with_still_piece)
+    assert loop_with_still_piece.backend.calls == 2
+
+
 def test_camera_lost_is_reported_not_frozen(loop_with_still_piece):
     settle(loop_with_still_piece)
     loop_with_still_piece.camera.lose()
@@ -236,7 +251,8 @@ def test_switching_profile_during_inference_drops_the_old_verdict(loop_with_stil
     rig = loop_with_still_piece
     rig.backend.peak = 0.9
     rig.backend.during_run = lambda: rig.loop.set_inspector(*other)
-    rig.settle()
+    rig.step()
+    rig.step()
     assert rig.state()["profile_id"] == "washer" and rig.backend.calls == 1
     assert rig.state()["label"] is None
     rig.settle()
@@ -277,9 +293,8 @@ def test_message_says_when_the_model_is_working(loop_with_still_piece):
     seen = []
     rig.backend.during_run = lambda: seen.append(rig.state()["message"])
     waiting = []
-    for _ in range(3):
-        rig.step()
-        waiting.append(rig.state()["message"])
+    rig.step()
+    waiting.append(rig.state()["message"])
     rig.settle()
     assert seen == ["Analizez piesa."]
     assert set(waiting) == {"Aștept să stea nemișcată piesa."}
@@ -350,7 +365,7 @@ def test_jpeg_is_none_before_the_first_frame():
 def test_error_in_a_zone_that_does_not_fit_is_reported():
     rig = Rig()
     rig.profile = rig.profile._replace(roi=[60, 60, 30, 30])
-    rig.loop.set_inspector(Inspector(rig.profile, rig.backend), rig.profile, SceneGate(TABLE))
+    rig.loop.set_inspector(Inspector(rig.profile, rig.backend), rig.profile, fast_gate())
     rig.step()
     state = rig.state()
     assert state["status"] == "ERROR" and "roi" in state["message"]
