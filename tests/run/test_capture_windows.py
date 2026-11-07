@@ -185,7 +185,7 @@ def test_setup_refuses_to_replace_a_station_that_already_has_photos(tmp_path, mo
     shot.parent.mkdir(parents=True)
     cv2.imwrite(str(shot), FRAME)
     ran = []
-    monkeypatch.setattr(capture, "run_setup", lambda settings, root: ran.append(root) or True)
+    monkeypatch.setattr(capture, "run_setup", lambda settings, root, lock_from_camera=True: ran.append(root) or True)
     assert main(["--object", "x", "--data", str(tmp_path), "--setup"]) == 2
     assert "--force" in capsys.readouterr().err and not ran
     assert main(["--object", "x", "--data", str(tmp_path), "--setup", "--force"]) == 0
