@@ -227,6 +227,26 @@ def test_resumed_piece_still_knows_its_face(monkeypatch, tmp_path):
     assert not [t for t in texts if "Fata A" in t] and [t for t in texts if "Intoarce piulita" in t]
 
 
+def test_setup_with_measured_values_keeps_them_instead_of_asking_the_camera(monkeypatch, tmp_path, opened):
+    # Some webcams report their defaults, not what they use, so a lock read from them is wrong.
+    Screen(monkeypatch, [ENTER, ENTER])
+    run_setup(SETTINGS._replace(exposure=-5.0, focus=325.0), tmp_path, lock_from_camera=False)
+    camera = load_station(tmp_path / "station.json").camera
+    assert (camera.exposure, camera.focus, camera.white_balance, camera.gain) == (-5.0, 325.0, None, None)
+    assert opened[0].settings.focus == 325.0
+
+
+def test_measured_values_on_the_command_line_reach_the_setup(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(capture, "run_setup", lambda settings, root, lock_from_camera=True:
+                        calls.append((settings, lock_from_camera)) or True)
+    main(["--object", "x", "--data", str(tmp_path), "--setup", "--camera", "1", "--exposure", "-5", "--focus", "325"])
+    main(["--object", "x", "--data", str(tmp_path), "--setup", "--camera", "1"])
+    (fixed, fixed_lock), (read, read_lock) = calls
+    assert (fixed.exposure, fixed.focus, fixed.white_balance, fixed_lock) == (-5.0, 325.0, None, False)
+    assert (read.exposure, read_lock) == (None, True)
+
+
 def test_windows_fit_a_laptop_screen_whatever_the_camera_size(monkeypatch, tmp_path, opened):
     # A 1920x1080 frame shown at full size runs off a laptop screen, zone selection included.
     screen = Screen(monkeypatch, [ESC])

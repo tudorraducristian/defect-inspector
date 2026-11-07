@@ -182,14 +182,15 @@ def _wait_for_enter(capture, lines):
             return None
 
 
-def run_setup(settings, root):
+def run_setup(settings, root, lock_from_camera=True):
     capture = open_camera(settings)
     try:
         _open_window()
         if _wait_for_enter(capture, ["Aseaza camera si lumina.", "Enter: blochez setarile. Esc: renunt."]) is None:
             return False
         # Reopened with the locked settings, so the table photo looks like the later photos.
-        settings = _locked(settings, capture)
+        if lock_from_camera:
+            settings = _locked(settings, capture)
         capture.release()
         capture = open_camera(settings)
         ok, frame = capture.read()
@@ -307,6 +308,11 @@ def main(argv=None):
     parser.add_argument("--fps", type=int, default=30)
     parser.add_argument("--flip-after", type=int, help="turn the piece over after this many photos")
     parser.add_argument("--force", action="store_true", help="with --setup, replace a station that has photos")
+    # Measured values, for a camera that does not report what it uses. Given ones are locked, the rest stay
+    # automatic, and nothing is read from the camera.
+    parser.add_argument("--exposure", type=float)
+    parser.add_argument("--focus", type=float)
+    parser.add_argument("--white-balance", type=float)
     args = parser.parse_args(argv)
     root = args.data / args.object
     types = _check_arguments(parser, args)
@@ -318,12 +324,14 @@ def main(argv=None):
             print("{} are deja poze; o statie noua le-ar strica. Adauga --force daca vrei asta.".format(root),
                   file=sys.stderr)
             return 2
-        settings = settings_from_dict({"index": args.camera, "width": args.width,
-                                       "height": args.height, "fps": args.fps})
+        measured = {"exposure": args.exposure, "focus": args.focus, "white_balance": args.white_balance}
+        lock_from_camera = all(value is None for value in measured.values())
+        settings = settings_from_dict(dict(measured, index=args.camera, width=args.width,
+                                           height=args.height, fps=args.fps))
         if args.headless:
             run_setup_headless(settings, root, _parse_roi(args.roi) if args.roi else None)
             return 0
-        return 0 if run_setup(settings, root) else 1
+        return 0 if run_setup(settings, root, lock_from_camera) else 1
 
     station_path = root / "station.json"
     if not station_path.exists():
