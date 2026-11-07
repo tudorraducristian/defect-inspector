@@ -4,46 +4,427 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>defect-inspector</title>
+  <link rel="icon" href="data:,">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0f14;
+      --surface: #131a22;
+      --surface-raised: #1b2530;
+      --line: #2b3847;
+      --text: #eef2f6;
+      --muted: #a3b0bd;
+      --ok: #15803d;
+      --bad: #b91c1c;
+      --warn: #b45309;
+      --live: #4ade80;
+      --focus: #7dd3fc;
+      --on-tone: #ffffff;
+      --radius: 8px;
+      --gap: 16px;
+      --font: "Segoe UI", Roboto, "Noto Sans", "DejaVu Sans", Arial, sans-serif;
+      --mono: "Cascadia Mono", Consolas, "DejaVu Sans Mono", ui-monospace, monospace;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body { height: 100%; margin: 0; }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      height: 100dvh;
+      background: var(--bg);
+      color: var(--text);
+      font: 16px/1.5 var(--font);
+    }
+
+    .bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--gap);
+      padding: 10px var(--gap);
+      border-bottom: 1px solid var(--line);
+    }
+
+    h1 { margin: 0; font-size: 1rem; font-weight: 600; letter-spacing: 0.02em; }
+
+    .link { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--muted); font-size: 0.875rem; }
+
+    .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+
+    .link[data-up="yes"] .dot { background: var(--live); }
+
+    .link[data-up="no"] .dot { background: var(--warn); }
+
+    .station {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) clamp(320px, 30vw, 440px);
+      gap: var(--gap);
+      padding: var(--gap);
+    }
+
+    .view {
+      position: relative;
+      min-height: 0;
+      overflow: hidden;
+      background: #000;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+    }
+
+    .view img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      transition: opacity 200ms ease-out;
+    }
+
+    .view[data-stale="yes"] img { opacity: 0.25; }
+
+    .view-note {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0;
+      padding: var(--gap);
+      text-align: center;
+      font-size: 1.25rem;
+      font-weight: 600;
+    }
+
+    .view-note[hidden] { display: none; }
+
+    .panel { display: flex; flex-direction: column; gap: var(--gap); min-height: 0; overflow-y: auto; }
+
+    .field label { display: block; margin-bottom: 4px; color: var(--muted); font-size: 0.875rem; }
+
+    select {
+      width: 100%;
+      min-height: 44px;
+      padding: 8px 12px;
+      background: var(--surface-raised);
+      color: var(--text);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      font: inherit;
+      cursor: pointer;
+    }
+
+    select:disabled { opacity: 0.5; cursor: wait; }
+
+    select:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+    .note { margin: 6px 0 0; font-size: 0.875rem; color: var(--muted); overflow-wrap: anywhere; }
+
+    .note[data-kind="problem"] { color: #fdba74; }
+
+    .note:empty { display: none; }
+
+    .verdict {
+      flex: 1;
+      min-height: 220px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: var(--gap);
+      text-align: center;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      transition: background-color 200ms ease-out;
+    }
+
+    .verdict[data-tone="ok"] { background: var(--ok); color: var(--on-tone); border-color: transparent; }
+
+    .verdict[data-tone="bad"] { background: var(--bad); color: var(--on-tone); border-color: transparent; }
+
+    .verdict[data-tone="warn"] { background: var(--warn); color: var(--on-tone); border-color: transparent; }
+
+    .verdict svg { width: 56px; height: 56px; }
+
+    .verdict[data-tone="busy"] svg { animation: turn 2s linear infinite; }
+
+    .word { font-size: 2rem; font-weight: 700; line-height: 1.1; }
+
+    .verdict[data-tone="ok"] .word,
+    .verdict[data-tone="bad"] .word { font-size: clamp(3.5rem, 5.5vw, 5.5rem); letter-spacing: 0.02em; }
+
+    .message { margin: 0; overflow-wrap: anywhere; }
+
+    .numbers {
+      margin: 0;
+      padding: 4px var(--gap);
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+    }
+
+    .numbers div {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: var(--gap);
+      padding: 8px 0;
+    }
+
+    .numbers div + div { border-top: 1px solid var(--line); }
+
+    .numbers dt { color: var(--muted); }
+
+    .numbers dd {
+      margin: 0;
+      font-family: var(--mono);
+      font-size: 1.25rem;
+      font-variant-numeric: tabular-nums;
+    }
+
+    @keyframes turn { to { transform: rotate(360deg); } }
+
+    @media (prefers-reduced-motion: reduce) {
+      .verdict[data-tone="busy"] svg { animation: none; }
+      .view img, .verdict { transition: none; }
+    }
+
+    @media (max-width: 900px) {
+      body { height: auto; min-height: 100vh; }
+      .station { grid-template-columns: minmax(0, 1fr); align-content: start; }
+      .view { aspect-ratio: 4 / 3; }
+      .panel { overflow: visible; }
+      .verdict[data-tone="ok"] .word,
+      .verdict[data-tone="bad"] .word { font-size: 3.5rem; }
+    }
+  </style>
 </head>
 <body>
-  <!-- Provisional page: the real interface is chosen in the discussion from the plan, Task 8. -->
-  <h1>defect-inspector</h1>
-  <p><label>Obiect: <select id="profile"></select></label></p>
-  <img src="/stream.mjpg" alt="Imaginea de la cameră" style="max-width: 100%">
-  <pre id="state"></pre>
-  <pre id="errors"></pre>
+  <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+    <defs>
+      <g id="i-check" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/><path d="M8 12.5l2.7 2.7L16 9.5"/>
+      </g>
+      <g id="i-alert" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 3.5L22 20.5H2L12 3.5z"/><path d="M12 10v5"/><path d="M12 18h.01"/>
+      </g>
+      <g id="i-wait" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <path d="M12 3a9 9 0 1 0 9 9"/>
+      </g>
+      <g id="i-place" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 8V4h4M17 4h4v4M21 16v4h-4M7 20H3v-4"/><circle cx="12" cy="12" r="3"/>
+      </g>
+    </defs>
+  </svg>
+
+  <header class="bar">
+    <h1>defect-inspector</h1>
+    <p class="link" id="link" data-up="unknown"><span class="dot"></span><span id="link-text">Mă conectez</span></p>
+  </header>
+
+  <main class="station">
+    <section class="view" id="view" data-stale="no" aria-label="Imaginea de la cameră">
+      <img id="live" src="/stream.mjpg" alt="Imaginea live de la cameră, cu zona suspectă colorată">
+      <p class="view-note" id="view-note" hidden>Imaginea nu mai e la zi.</p>
+    </section>
+
+    <aside class="panel" aria-label="Rezultatul inspecției">
+      <div class="field">
+        <label for="profile">Obiect</label>
+        <select id="profile"></select>
+        <p class="note" id="profile-note" role="alert"></p>
+        <p class="note" id="profile-errors" data-kind="problem"></p>
+      </div>
+
+      <div class="verdict" id="verdict" data-tone="neutral" aria-live="polite">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><use id="verdict-icon" href="#i-wait"></use></svg>
+        <div class="word" id="verdict-word">Mă conectez</div>
+        <p class="message" id="verdict-message"></p>
+      </div>
+
+      <dl class="numbers">
+        <div><dt>Scor</dt><dd id="score">—</dd></div>
+        <div><dt>Prag</dt><dd id="threshold">—</dd></div>
+        <div><dt>Timp până la verdict</dt><dd id="latency">—</dd></div>
+      </dl>
+    </aside>
+  </main>
+
   <script>
-    var select = document.getElementById("profile");
+    "use strict";
+
+    var POLL_MS = 400;
+    var RETRY_STREAM_MS = 2000;
+    var STATE_TIMEOUT_MS = 3000;
+    var ACTIVATE_TIMEOUT_MS = 60000;
+
+    var LOOKS = {
+      NO_PROFILE: {word: "Niciun obiect", tone: "neutral", icon: "#i-place"},
+      EMPTY: {word: "Masă goală", tone: "neutral", icon: "#i-place"},
+      MOVING: {word: "Un moment", tone: "busy", icon: "#i-wait"},
+      CAMERA_LOST: {word: "Fără cameră", tone: "warn", icon: "#i-alert"},
+      ERROR: {word: "Eroare", tone: "warn", icon: "#i-alert"}
+    };
+    var VERDICTS = {
+      OK: {word: "OK", tone: "ok", icon: "#i-check", message: "Piesa e bună."},
+      DEFECT: {word: "DEFECT", tone: "bad", icon: "#i-alert", message: "Zona suspectă e colorată pe imagine."}
+    };
+    var OFFLINE = {word: "Fără legătură", tone: "warn", icon: "#i-alert"};
+
+    var FOUR_DECIMALS = new Intl.NumberFormat("ro-RO", {minimumFractionDigits: 4, maximumFractionDigits: 4});
+    var ONE_DECIMAL = new Intl.NumberFormat("ro-RO", {minimumFractionDigits: 1, maximumFractionDigits: 1});
+
+    function byId(id) { return document.getElementById(id); }
+
+    var select = byId("profile");
+    var image = byId("live");
+    var known = [];
+    var activating = false;
+    var offline = false;
+
+    function getJson(url, options, timeoutMs) {
+      var controller = new AbortController();
+      var timer = setTimeout(function () { controller.abort(); }, timeoutMs);
+      var request = Object.assign({signal: controller.signal}, options || {});
+      return fetch(url, request).then(function (response) {
+        return response.json().then(function (body) {
+          if (!response.ok) { throw new Error(body.detail || "Serverul a refuzat cererea."); }
+          return body;
+        });
+      }).finally(function () { clearTimeout(timer); });
+    }
+
+    function number(value) { return value === null ? "—" : FOUR_DECIMALS.format(value); }
+
+    function duration(ms) {
+      if (ms === null) { return "—"; }
+      return ms >= 1000 ? ONE_DECIMAL.format(ms / 1000) + " s" : Math.round(ms) + " ms";
+    }
+
+    function showVerdict(look, message) {
+      var box = byId("verdict");
+      box.dataset.tone = look.tone;
+      byId("verdict-icon").setAttribute("href", look.icon);
+      byId("verdict-word").textContent = look.word;
+      byId("verdict-message").textContent = message;
+    }
+
+    function showLink(up) {
+      var link = byId("link");
+      link.dataset.up = up ? "yes" : "no";
+      byId("link-text").textContent = up ? "Conectat" : "Fără legătură";
+      byId("view").dataset.stale = up ? "no" : "yes";
+      byId("view-note").hidden = up;
+    }
+
+    function restartStream() {
+      image.src = "/stream.mjpg?t=" + Date.now();
+    }
+
+    function showState(state) {
+      if (offline) { restartStream(); }
+      offline = false;
+      showLink(true);
+
+      if (activating) {
+        showLoading();
+        return;
+      }
+      if (state.status === "RESULT" && VERDICTS[state.label]) {
+        var verdict = VERDICTS[state.label];
+        showVerdict(verdict, verdict.message);
+      } else {
+        showVerdict(LOOKS[state.status] || LOOKS.ERROR, state.message);
+      }
+      byId("score").textContent = number(state.score);
+      byId("threshold").textContent = number(state.threshold);
+      byId("latency").textContent = duration(state.latency_ms);
+      select.value = state.profile_id || "";
+    }
+
+    function clearNumbers() {
+      byId("score").textContent = "—";
+      byId("threshold").textContent = "—";
+      byId("latency").textContent = "—";
+    }
+
+    /* The verdict on screen belongs to the previous object, so it goes away at once. */
+    function showLoading() {
+      showVerdict(LOOKS.MOVING, "Încarc modelul.");
+      clearNumbers();
+    }
+
+    function showOffline() {
+      offline = true;
+      showLink(false);
+      showVerdict(OFFLINE, "Serverul nu răspunde. Reîncerc singur.");
+      clearNumbers();
+    }
+
+    function poll() {
+      getJson("/api/state", null, STATE_TIMEOUT_MS).then(showState).catch(showOffline).then(function () {
+        setTimeout(poll, POLL_MS);
+      });
+    }
+
+    function fillProfiles(body) {
+      known = body.profiles;
+      select.textContent = "";
+      var first = document.createElement("option");
+      first.value = "";
+      first.textContent = known.length ? "Alege" : "Niciun obiect în folderul de profile";
+      select.appendChild(first);
+      known.forEach(function (profile) {
+        var option = document.createElement("option");
+        option.value = profile.id;
+        option.textContent = profile.name;
+        select.appendChild(option);
+      });
+      select.value = body.active || "";
+      byId("profile-errors").textContent = body.errors.length
+        ? "Nu pot folosi: " + body.errors.join("; ")
+        : "";
+    }
 
     function loadProfiles() {
-      fetch("/api/profiles").then(function (r) { return r.json(); }).then(function (body) {
-        select.innerHTML = '<option value="">alege</option>';
-        body.profiles.forEach(function (p) {
-          var option = document.createElement("option");
-          option.value = p.id;
-          option.textContent = p.name;
-          option.selected = p.id === body.active;
-          select.appendChild(option);
-        });
-        document.getElementById("errors").textContent = body.errors.join("\n");
+      getJson("/api/profiles", null, STATE_TIMEOUT_MS).then(fillProfiles).catch(function () {
+        setTimeout(loadProfiles, RETRY_STREAM_MS);
       });
     }
 
     select.addEventListener("change", function () {
-      if (select.value) {
-        fetch("/api/profiles/" + encodeURIComponent(select.value) + "/activate", {method: "POST"});
-      }
+      if (!select.value) { return; }
+      var note = byId("profile-note");
+      activating = true;
+      select.disabled = true;
+      note.dataset.kind = "";
+      note.textContent = "";
+      showLoading();
+      getJson("/api/profiles/" + encodeURIComponent(select.value) + "/activate", {method: "POST"}, ACTIVATE_TIMEOUT_MS)
+        .then(function () { note.textContent = ""; })
+        .catch(function (error) {
+          note.dataset.kind = "problem";
+          note.textContent = error.message;
+        })
+        .then(function () {
+          activating = false;
+          select.disabled = false;
+        });
     });
 
-    function loadState() {
-      fetch("/api/state").then(function (r) { return r.json(); }).then(function (state) {
-        document.getElementById("state").textContent = JSON.stringify(state, null, 2);
-      });
-    }
+    image.addEventListener("error", function () {
+      setTimeout(restartStream, RETRY_STREAM_MS);
+    });
 
     loadProfiles();
-    loadState();
-    setInterval(loadState, 500);
+    poll();
   </script>
 </body>
 </html>

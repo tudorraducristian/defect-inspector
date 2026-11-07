@@ -272,6 +272,19 @@ def test_status_is_moving_while_the_model_works():
     assert seen == [("MOVING", None), ("MOVING", None)]
 
 
+def test_message_says_when_the_model_is_working(loop_with_still_piece):
+    rig = loop_with_still_piece
+    seen = []
+    rig.backend.during_run = lambda: seen.append(rig.state()["message"])
+    waiting = []
+    for _ in range(3):
+        rig.step()
+        waiting.append(rig.state()["message"])
+    rig.settle()
+    assert seen == ["Analizez piesa."]
+    assert set(waiting) == {"Aștept să stea nemișcată piesa."}
+
+
 def test_new_table_photo_replaces_the_gate(loop_with_still_piece):
     settle(loop_with_still_piece)
     loop_with_still_piece.loop.set_background(PIECE)

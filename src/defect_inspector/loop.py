@@ -26,6 +26,7 @@ MESSAGES = {
     MOVING: "Aștept să stea nemișcată piesa.",
     RESULT: "",
 }
+MESSAGE_ANALYZING = "Analizez piesa."
 JPEG_QUALITY = 80
 STEP_PAUSE_S = 0.02
 
@@ -116,6 +117,7 @@ class InspectionLoop:
         self._publish(MOVING)
 
     def _inspect(self, inspector, frame, generation):
+        self._publish(MOVING, MESSAGE_ANALYZING)
         try:
             verdict = inspector.inspect(frame)
         except Exception as error:
@@ -169,7 +171,6 @@ class InspectionLoop:
             return
         self._last_frame_id = frame_id
         if gate is None:
-            self._publish(MOVING)
             self._inspect(inspector, frame, generation)
             return
         try:
