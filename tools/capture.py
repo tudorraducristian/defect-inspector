@@ -29,6 +29,7 @@ KEY_ENTER = (10, 13)
 KEY_ESC = 27
 MIN_SECONDS_BETWEEN_SHOTS = 0.4
 WINDOW = "defect-inspector"
+WINDOW_SIZE = (1280, 720)
 NO_CAMERA_SIZE = (360, 640, 3)
 NO_CAMERA_LINES = ["Camera nu da imagine.", "Reincerc singur. Esc: opresc."]
 
@@ -148,14 +149,22 @@ def _report_locked(settings, capture):
             print("  {} {:g} (cerut {:g})".format(label, capture.get(prop), getattr(settings, name)))
 
 
+def _open_window():
+    """A window that scales the frame down, so 1920x1080 still fits a laptop screen."""
+    cv2.namedWindow(WINDOW, cv2.WINDOW_NORMAL)
+    cv2.resizeWindow(WINDOW, *WINDOW_SIZE)
+
+
 def _show(frame, lines, roi=None):
     preview = frame.copy()
+    # Text and frame are scaled down together, so the text grows with the frame.
+    scale = max(1.0, frame.shape[1] / float(WINDOW_SIZE[0]))
     if roi:
-        cv2.rectangle(preview, (roi[0], roi[1]), (roi[0] + roi[2], roi[1] + roi[3]), (0, 255, 0), 2)
+        cv2.rectangle(preview, (roi[0], roi[1]), (roi[0] + roi[2], roi[1] + roi[3]), (0, 255, 0), int(2 * scale))
     for index, line in enumerate(lines):
-        y = 30 + 30 * index
-        cv2.putText(preview, line, (10, y), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 4)
-        cv2.putText(preview, line, (10, y), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        y = int((30 + 30 * index) * scale)
+        cv2.putText(preview, line, (10, y), cv2.FONT_HERSHEY_SIMPLEX, 0.7 * scale, (0, 0, 0), int(4 * scale))
+        cv2.putText(preview, line, (10, y), cv2.FONT_HERSHEY_SIMPLEX, 0.7 * scale, (255, 255, 255), int(2 * scale))
     cv2.imshow(WINDOW, preview)
     return cv2.waitKey(30) & 0xFF
 
@@ -176,6 +185,7 @@ def _wait_for_enter(capture, lines):
 def run_setup(settings, root):
     capture = open_camera(settings)
     try:
+        _open_window()
         if _wait_for_enter(capture, ["Aseaza camera si lumina.", "Enter: blochez setarile. Esc: renunt."]) is None:
             return False
         # Reopened with the locked settings, so the table photo looks like the later photos.
@@ -226,6 +236,7 @@ def run_session(camera, steps, roi, flip_after=None):
     """One window for the whole session; return False if Tudor stopped it with Esc."""
     last_shot_at = 0.0
     try:
+        _open_window()
         for position, step in enumerate(steps, 1):
             for shot_index, path in enumerate(step.paths):
                 lines = _step_lines(step, shot_index, position, len(steps), flip_after)

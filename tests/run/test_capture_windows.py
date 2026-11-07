@@ -25,6 +25,9 @@ class Screen:
         monkeypatch.setattr(capture.cv2, "waitKey", self.next_key)
         monkeypatch.setattr(capture.cv2, "destroyAllWindows", self.close)
         monkeypatch.setattr(capture.cv2, "selectROI", lambda *a, **k: roi)
+        self.window_size = None
+        monkeypatch.setattr(capture.cv2, "namedWindow", lambda name, flags: setattr(self, "flags", flags))
+        monkeypatch.setattr(capture.cv2, "resizeWindow", lambda name, w, h: setattr(self, "window_size", (w, h)))
 
     def next_key(self, delay):
         if not self.keys:
@@ -222,6 +225,16 @@ def test_resumed_piece_still_knows_its_face(monkeypatch, tmp_path):
     Screen(monkeypatch, [ENTER] * 2)
     run_session(StillCamera(), plan_session(tmp_path, "good", pieces=1, shots=5), None, flip_after=3)
     assert not [t for t in texts if "Fata A" in t] and [t for t in texts if "Intoarce piulita" in t]
+
+
+def test_windows_fit_a_laptop_screen_whatever_the_camera_size(monkeypatch, tmp_path, opened):
+    # A 1920x1080 frame shown at full size runs off a laptop screen, zone selection included.
+    screen = Screen(monkeypatch, [ESC])
+    run_setup(SETTINGS, tmp_path)
+    assert screen.flags == cv2.WINDOW_NORMAL and screen.window_size[0] <= 1280
+    screen = Screen(monkeypatch, [ESC])
+    run_session(StillCamera(), plan_session(tmp_path, "good", pieces=1, shots=1), None)
+    assert screen.flags == cv2.WINDOW_NORMAL and screen.window_size[0] <= 1280
 
 
 def test_esc_during_setup_writes_nothing(monkeypatch, tmp_path, opened):
