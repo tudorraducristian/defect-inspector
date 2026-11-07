@@ -356,6 +356,26 @@ def test_jpeg_uses_the_newest_camera_frame_while_the_model_works():
     assert np.abs(frames[0].astype(int) - PIECE.astype(int)).mean() > 5
 
 
+def is_greenish(pixel):
+    return int(pixel[1]) > int(pixel[2]) + 40 and int(pixel[1]) > int(pixel[0]) + 40
+
+
+def test_jpeg_shows_the_zone_where_the_piece_goes():
+    # At the station the piece is placed by looking at the page; a piece partly outside the zone reads as a defect.
+    rig = Rig()
+    rig.profile = rig.profile._replace(roi=[4, 4, 56, 56])
+    rig.loop.set_inspector(Inspector(rig.profile, rig.backend), rig.profile, fast_gate())
+    rig.settle()
+    image = decode(rig.loop.jpeg())
+    assert is_greenish(image[30, 4]) and not is_greenish(image[30, 30])
+
+
+def test_jpeg_without_a_zone_draws_no_frame():
+    rig = Rig()
+    rig.settle()
+    assert not is_greenish(decode(rig.loop.jpeg())[30, 0])
+
+
 def test_jpeg_is_none_before_the_first_frame():
     camera = FakeCamera(PIECE)
     camera.lose()

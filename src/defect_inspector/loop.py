@@ -28,6 +28,7 @@ MESSAGES = {
 }
 MESSAGE_ANALYZING = "Analizez piesa."
 JPEG_QUALITY = 80
+ZONE_COLOR = (0, 200, 0)
 STEP_PAUSE_S = 0.02
 
 
@@ -83,8 +84,16 @@ class InspectionLoop:
         with self._lock:
             heat = self._heat
             threshold = self._profile.threshold if self._profile else None
+            roi = self._profile.roi if self._profile else None
         if heat is not None and heat.shape == frame.shape[:2]:
             frame = render_overlay(frame, heat, threshold)
+        elif roi:
+            frame = frame.copy()  # the camera's own frame is shared and must stay clean
+        if roi:
+            # The piece is placed by looking at this image, so the zone the model sees is drawn on it.
+            x, y, w, h = roi
+            thickness = max(2, frame.shape[1] // 400)
+            cv2.rectangle(frame, (x, y), (x + w - 1, y + h - 1), ZONE_COLOR, thickness)
         ok, encoded = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
         return encoded.tobytes() if ok else None
 
