@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>defect-inspector</title>
+</head>
+<body>
+  <!-- Provisional page: the real interface is chosen in the discussion from the plan, Task 8. -->
+  <h1>defect-inspector</h1>
+  <p><label>Obiect: <select id="profile"></select></label></p>
+  <img src="/stream.mjpg" alt="Imaginea de la cameră" style="max-width: 100%">
+  <pre id="state"></pre>
+  <pre id="errors"></pre>
+  <script>
+    var select = document.getElementById("profile");
+
+    function loadProfiles() {
+      fetch("/api/profiles").then(function (r) { return r.json(); }).then(function (body) {
+        select.innerHTML = '<option value="">alege</option>';
+        body.profiles.forEach(function (p) {
+          var option = document.createElement("option");
+          option.value = p.id;
+          option.textContent = p.name;
+          option.selected = p.id === body.active;
+          select.appendChild(option);
+        });
+        document.getElementById("errors").textContent = body.errors.join("\n");
+      });
+    }
+
+    select.addEventListener("change", function () {
+      if (select.value) {
+        fetch("/api/profiles/" + encodeURIComponent(select.value) + "/activate", {method: "POST"});
+      }
+    });
+
+    function loadState() {
+      fetch("/api/state").then(function (r) { return r.json(); }).then(function (state) {
+        document.getElementById("state").textContent = JSON.stringify(state, null, 2);
+      });
+    }
+
+    loadProfiles();
+    loadState();
+    setInterval(loadState, 500);
+  </script>
+</body>
+</html>

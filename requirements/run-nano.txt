@@ -1,0 +1,10 @@
+# Python 3.6.9 on the Jetson Nano, with OPENBLAS_CORETYPE=ARMV8 set. Starting point: the versions
+# from jetson-car-logger. OpenCV comes from JetPack; onnxruntime_gpu 1.11 is installed separately,
+# as in docs/proba-viteza.md.
+fastapi==0.67.0
+uvicorn==0.15.0
+pydantic==1.8.2
+aiofiles==0.8.0
+requests==2.27.1
+pytest==7.0.1
+numpy==1.19.5

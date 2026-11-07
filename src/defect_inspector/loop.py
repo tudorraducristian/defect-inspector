@@ -87,6 +87,13 @@ class InspectionLoop:
         ok, encoded = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
         return encoded.tobytes() if ok else None
 
+    def latest_frame(self):
+        latest = self._camera.latest()
+        return None if latest is None else latest[0]
+
+    def configure_camera(self, settings):
+        self._camera.configure(settings)
+
     def set_inspector(self, inspector, profile, gate):
         with self._lock:
             self._inspector, self._profile, self._gate = inspector, profile, gate

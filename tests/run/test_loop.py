@@ -280,6 +280,24 @@ def test_new_table_photo_replaces_the_gate(loop_with_still_piece):
     assert loop_with_still_piece.state()["label"] is None
 
 
+def test_latest_frame_is_the_camera_frame_or_nothing(loop_with_still_piece):
+    assert loop_with_still_piece.loop.latest_frame() is PIECE
+    loop_with_still_piece.camera.lose()
+    assert loop_with_still_piece.loop.latest_frame() is None
+
+
+def test_new_table_photo_without_a_profile_is_refused(loop_without_profile):
+    with pytest.raises(ValueError, match="profile"):
+        loop_without_profile.set_background(PIECE)
+
+
+def test_configure_camera_reaches_the_camera(loop_with_still_piece):
+    seen = []
+    loop_with_still_piece.camera.configure = seen.append
+    loop_with_still_piece.loop.configure_camera("settings")
+    assert seen == ["settings"]
+
+
 def decode(jpeg):
     return cv2.imdecode(np.frombuffer(jpeg, np.uint8), cv2.IMREAD_COLOR)
 

@@ -64,6 +64,7 @@ class CameraWorker:
         self._last_frame_at = None
         self._last_attempt_at = None
         self._failed = False
+        self._reopen = False
         self._running = False
         self._thread = None
 
@@ -89,7 +90,21 @@ class CameraWorker:
         with self._lock:
             self._failed = True
 
+    def configure(self, settings):
+        """Use these settings on the same camera; the reopening happens in the camera thread."""
+        settings = settings._replace(index=self._settings.index)
+        with self._lock:
+            if settings != self._settings:
+                self._settings = settings
+                self._reopen = True
+
     def _ensure_open(self):
+        with self._lock:
+            reopen, self._reopen = self._reopen, False
+        if reopen and self._cap is not None:
+            self._cap.release()
+            self._cap = None
+            self._last_attempt_at = None
         if self._cap is not None:
             if self._cap.isOpened():
                 return True
@@ -163,6 +178,9 @@ class ReplayCamera:
         pass
 
     def stop(self):
+        pass
+
+    def configure(self, settings):
         pass
 
     def is_lost(self):

@@ -126,6 +126,38 @@ def test_worker_thread_delivers_a_frame_and_stops():
     assert not worker._thread.is_alive()
 
 
+def test_configure_reopens_with_the_new_settings_on_the_same_camera(fake_clock):
+    opened = []
+    capture = FakeCapture([])
+
+    def open_capture(settings):
+        opened.append(settings)
+        return capture
+
+    worker = CameraWorker(SETTINGS._replace(index=2), open_capture=open_capture, now=fake_clock)
+    worker._run_once()
+    worker.configure(SETTINGS._replace(index=0, width=1280))
+    worker._run_once()
+    assert capture.release_count == 1 and len(opened) == 2
+    assert opened[1].width == 1280 and opened[1].index == 2
+
+
+def test_configure_with_the_same_settings_does_not_reopen(fake_clock):
+    capture = FakeCapture([])
+    worker = CameraWorker(SETTINGS, open_capture=capture.open, now=fake_clock)
+    worker._run_once()
+    worker.configure(SETTINGS)
+    worker._run_once()
+    assert capture.open_count == 1
+
+
+def test_replay_ignores_camera_settings(tmp_path):
+    cv2.imwrite(str(tmp_path / "0.png"), FRAME)
+    camera = ReplayCamera(tmp_path)
+    camera.configure(SETTINGS)
+    assert camera.latest() is not None
+
+
 @pytest.fixture
 def image_folder(tmp_path):
     for i in range(3):
