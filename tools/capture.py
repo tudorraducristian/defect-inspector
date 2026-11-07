@@ -110,7 +110,8 @@ def capture_shots(camera, paths, timeout_s=10.0):
 
 
 def build_station(settings, roi):
-    return {"roi": roi, "camera": dict(settings._asdict())}
+    # The platform says which camera driver the locked values belong to.
+    return {"roi": roi, "camera": dict(settings._asdict(), platform=sys.platform)}
 
 
 def write_station(root, station, background):

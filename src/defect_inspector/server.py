@@ -12,7 +12,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, StreamingResponse
 
 from defect_inspector.backends import load_backend
-from defect_inspector.camera import settings_from_dict
+from defect_inspector.camera import settings_for_this_machine
 from defect_inspector.inspector import Inspector
 from defect_inspector.profile import MODEL_FILE, list_profiles
 from defect_inspector.scene import gate_for_profile
@@ -52,7 +52,7 @@ def _activate(loop, profile, backend_name):
     gate = gate_for_profile(profile)
     backend = load_backend(backend_name, profile.path / MODEL_FILE)
     if profile.camera:
-        loop.configure_camera(settings_from_dict(profile.camera))
+        loop.configure_camera(settings_for_this_machine(profile.camera))
     loop.set_inspector(Inspector(profile, backend), profile, gate)
 
 

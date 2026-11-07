@@ -281,3 +281,28 @@ def test_open_camera_locks_exposure_and_white_balance_when_given(recording_captu
     props = open_camera(SETTINGS._replace(exposure=-5, white_balance=4000)).props
     assert props[cv2.CAP_PROP_AUTO_EXPOSURE] == 1 and props[cv2.CAP_PROP_EXPOSURE] == -5
     assert props[cv2.CAP_PROP_AUTO_WB] == 0 and props[cv2.CAP_PROP_WB_TEMPERATURE] == 4000
+
+
+LAPTOP_STATION = {"index": 1, "width": 1920, "height": 1080, "fps": 30, "exposure": -4.0, "white_balance": None,
+                  "focus": 320.0, "gain": None, "platform": "win32"}
+
+
+def test_settings_from_another_kind_of_machine_keep_only_the_image_size(monkeypatch):
+    # Exposure -4 means 1/16 s on DirectShow and almost nothing on V4L2: a black image with no error.
+    monkeypatch.setattr(camera_module.sys, "platform", "linux")
+    settings = camera_module.settings_for_this_machine(LAPTOP_STATION)
+    assert (settings.width, settings.height, settings.fps) == (1920, 1080, 30)
+    assert (settings.index, settings.exposure, settings.focus) == (0, None, None)
+
+
+def test_settings_from_the_same_kind_of_machine_are_kept(monkeypatch):
+    monkeypatch.setattr(camera_module.sys, "platform", "win32")
+    settings = camera_module.settings_for_this_machine(LAPTOP_STATION)
+    assert (settings.index, settings.exposure, settings.focus) == (1, -4.0, 320.0)
+
+
+def test_settings_that_do_not_say_their_machine_are_kept(monkeypatch):
+    monkeypatch.setattr(camera_module.sys, "platform", "linux")
+    fields = dict(LAPTOP_STATION)
+    del fields["platform"]
+    assert camera_module.settings_for_this_machine(fields).exposure == -4.0

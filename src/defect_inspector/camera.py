@@ -35,6 +35,18 @@ def settings_from_dict(fields):
     return CameraSettings(**{name: merged[name] for name in CameraSettings._fields})
 
 
+def settings_for_this_machine(fields):
+    """Camera settings from a station, keeping only the image size if another kind of machine took it.
+
+    Camera numbers and locked values mean different things on DirectShow and on V4L2; applied on the
+    wrong one they give a black image with no error. A station that does not say is taken as it is.
+    """
+    platform = (fields or {}).get("platform")
+    if platform is not None and platform != sys.platform:
+        fields = {name: fields[name] for name in ("width", "height", "fps") if name in fields}
+    return settings_from_dict(fields)
+
+
 def load_station(path):
     fields = json.loads(Path(path).read_text(encoding="utf-8"))
     return Station(settings_from_dict(fields.get("camera")), fields.get("roi"))

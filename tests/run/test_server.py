@@ -139,6 +139,15 @@ def test_activate_applies_the_camera_settings_of_the_profile(client, fake_loop):
     assert (fake_loop.camera_settings.width, fake_loop.camera_settings.height) == (640, 480)
 
 
+def test_activate_on_another_kind_of_machine_skips_the_locked_values(fake_loop, tmp_path, monkeypatch):
+    import defect_inspector.camera as camera_module
+    monkeypatch.setattr(camera_module.sys, "platform", "linux")
+    write_profile(tmp_path, camera={"width": 640, "height": 480, "exposure": -4.0, "platform": "win32"})
+    client = TestClient(create_app(fake_loop, tmp_path, "ort-cpu"))
+    client.post("/api/profiles/piulita-m10/activate")
+    assert fake_loop.camera_settings.width == 640 and fake_loop.camera_settings.exposure is None
+
+
 def test_activate_profile_without_camera_settings_leaves_the_camera(fake_loop, tmp_path):
     write_profile(tmp_path, camera=None)
     client = TestClient(create_app(fake_loop, tmp_path, "ort-cpu"))

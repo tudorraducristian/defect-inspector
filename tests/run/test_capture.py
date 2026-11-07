@@ -101,3 +101,10 @@ def test_station_round_trip(tmp_path):
     station = load_station(tmp_path / "station.json")
     assert station.camera == SETTINGS and station.roi == [1, 2, 3, 4]
     assert cv2.imread(str(tmp_path / "background.jpg")) is not None
+
+
+def test_station_says_which_kind_of_machine_took_it(tmp_path):
+    import json
+    import sys
+    write_station(tmp_path, build_station(SETTINGS, [1, 2, 3, 4]), FRAME)
+    assert json.loads((tmp_path / "station.json").read_text())["camera"]["platform"] == sys.platform
