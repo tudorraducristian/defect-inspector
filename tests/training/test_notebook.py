@@ -21,6 +21,11 @@ def test_notebook_checks_the_teacher_size():
     assert "10779715" in "".join(c.source for c in read_notebook().cells)
 
 
+def test_notebook_passes_the_station_when_the_dataset_has_one():
+    text = "".join(c.source for c in read_notebook().cells)
+    assert 'DATASET_ROOT / "station.json"' in text and "{station_flag}" in text
+
+
 def without_shell_commands(source):
     """Replace IPython's ! lines with pass, keeping the indentation of the blocks."""
     lines = []

@@ -31,6 +31,16 @@ def _print_progress(update):
         print("step {step}, loss {loss:.4f}".format(**update), flush=True)
 
 
+def _read_station(path):
+    if path is None:
+        return None
+    station = json.loads(path.read_text(encoding="utf-8"))
+    background = path.with_name("background.jpg")
+    if background.exists():
+        station["background"] = background
+    return station
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset-root", required=True, type=Path)
@@ -44,6 +54,7 @@ def main(argv=None):
     parser.add_argument("--no-autoencoder", action="store_true")
     parser.add_argument("--require-gpu", action="store_true")
     parser.add_argument("--num-workers", type=int, default=4)
+    parser.add_argument("--station", type=Path, help="station.json of the dataset; background.jpg sits next to it")
     args = parser.parse_args(argv)
 
     if args.require_gpu:
@@ -75,7 +86,7 @@ def main(argv=None):
         for path in splits.val[:VERIFY_IMAGES]
     ])
     write_profile(net, args.out / "profile", args.object_id, args.object_name,
-                  args.image_size, metrics, images)
+                  args.image_size, metrics, images, station=_read_station(args.station))
     print("AUROC {:.4f}, proposed threshold {:.4f}".format(metrics["image_auroc"], metrics["threshold"]))
 
 

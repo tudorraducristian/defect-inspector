@@ -71,6 +71,15 @@ def test_station_supplies_roi_and_camera(tmp_path, net, images):
     assert data["roi"] == [0, 0, 10, 10] and data["camera"] == {"exposure": 100}
 
 
+def test_station_background_is_copied_into_the_profile(tmp_path, net, images):
+    background = tmp_path / "background.jpg"
+    background.write_bytes(b"table")
+    station = {"roi": None, "camera": None, "background": background}
+    path = write_profile(net, tmp_path / "p", "x", "X", 256, METRICS, images, station=station)
+    assert (path / "background.jpg").read_bytes() == b"table"
+    assert set(json.loads((path / "profile.json").read_text())) == PROFILE_FIELDS
+
+
 def test_to_anomaly_net_uses_the_trained_normalization():
     base = build_random_net(256)
     parts = TrainedParts(base.teacher, base.student, base.autoencoder,

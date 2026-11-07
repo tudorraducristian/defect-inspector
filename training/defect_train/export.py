@@ -107,6 +107,8 @@ def write_profile(net, out_dir, object_id, object_name, image_size, metrics, ima
             "camera": station.get("camera"),
         }
         (staging / "profile.json").write_text(json.dumps(profile, indent=2), encoding="utf-8")
+        if station.get("background"):
+            shutil.copy(station["background"], staging / "background.jpg")
     except Exception:
         shutil.rmtree(staging, ignore_errors=True)
         raise

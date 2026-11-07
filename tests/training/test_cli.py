@@ -28,6 +28,17 @@ def test_cli_without_autoencoder(tmp_path, tiny_dataset, random_teacher):
     assert json.loads((tmp_path / "profile" / "profile.json").read_text())["image_size"] == 192
 
 
+def test_cli_station_goes_into_the_profile(tmp_path, tiny_dataset, random_teacher):
+    (tiny_dataset / "station.json").write_text(json.dumps({"roi": [0, 0, 8, 8], "camera": {"index": 1}}))
+    (tiny_dataset / "background.jpg").write_bytes(b"table")
+    main(["--dataset-root", str(tiny_dataset), "--object-id", "tiny", "--object-name", "Tiny",
+          "--teacher", str(random_teacher), "--out", str(tmp_path), "--train-steps", "1",
+          "--num-workers", "0", "--station", str(tiny_dataset / "station.json")])
+    profile = json.loads((tmp_path / "profile" / "profile.json").read_text())
+    assert profile["roi"] == [0, 0, 8, 8] and profile["camera"] == {"index": 1}
+    assert (tmp_path / "profile" / "background.jpg").read_bytes() == b"table"
+
+
 def test_same_command_resumes(tmp_path, tiny_dataset, random_teacher, capsys):
     run_cli(tiny_dataset, random_teacher, tmp_path, train_steps=2)
     capsys.readouterr()
