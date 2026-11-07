@@ -23,10 +23,10 @@ Modelul e sub scorurile publicate cu aproximativ 0,8 puncte procentuale și pest
 | `flip` | 1,0000 |
 | `scratch` | 0,9644 |
 
-## La pragul propus
+## La pragul confirmat
 
-Pragul propus e **0,3334**, calculat doar din cele 22 de imagini de validare: scorul lor cel
-mai mare, plus 10%. Încă nu e confirmat.
+Pragul e **0,3334**, calculat doar din cele 22 de imagini de validare: scorul lor cel
+mai mare, plus 10%. Confirmat de Tudor pe 7 noiembrie 2026.
 
 | Imagini de test | Total | Marcate ca defecte |
 |---|---:|---:|
